@@ -1,254 +1,45 @@
-# This code is licensed from CircleCI to the user under the MIT license. See
-# https://circleci.com/orbs/registry/licensing for details.
-commands:
-  checkout-build-test:
-    description: |
-      Checkout, build and test a gradle project.
-    parameters:
-      additional-steps:
-        default:
-          - run: ""
-        description: Additional steps to run after build, i.e. persist artifacts or
-          dockerfiles
-        type: steps
-      build_command:
-        default: build
-        description: Custom Gradle build command to use
-        type: string
-      executor:
-        default: default
-        description: The name of custom executor to use
-        type: executor
-      test_command:
-        default: test
-        description: Custom Gradle test command to use
-        type: string
+
+version: 2.1
+executors:
+  tugboat-exec:
+    docker:
+      - image: circleci/openjdk:10-jdk
+    environment:
+      - IMAGE: tugboat-executor
+jobs:
+  Build:
+    executor: tugboat-executor
     steps:
       - checkout
-      - with-cache:
-          steps:
-            - run:
-                command: ./gradlew << parameters.build_command >>
-                name: Gradle Build
-            - run:
-                command: ./gradlew << parameters.test_command >>
-                name: Gradle Test
-      - steps: << parameters.additional-steps >>
-  checkout-build-test-publish:
-    description: |
-      Checkout, build and test a gradle project.
-    parameters:
-      additional-steps:
-        default:
-          - run: ""
-        description: Additional steps to run after build, i.e. persist artifacts or
-          dockerfiles
-        type: steps
-      artifacts_path:
-        description: Artifacts to be published
-        type: string
-      build_command:
-        default: build
-        description: Custom Gradle build command to use
-        type: string
-      executor:
-        default: default
-        description: The name of custom executor to use
-        type: executor
-      test_command:
-        default: test
-        description: Custom Gradle test command to use
-        type: string
-      test_results_path:
-        description: Results to be published
-        type: string
-    steps:
-      - checkout-build-test:
-          additional-steps: << parameters.additional-steps >>
-          build_command: << parameters.build_command >>
-          test_command: << parameters.test_command >>
-      - publish-test-results:
-          test_results_path: << parameters.test_results_path >>
-      - publish-artifacts:
-          artifacts_path: << parameters.artifacts_path >>
-  publish-artifacts:
-    description: |
-      Store artifacts.
-    parameters:
-      artifacts_path:
-        description: Artifacts to be published
-        type: string
-    steps:
-      - when:
-          condition: << parameters.artifacts_path >>
-          steps:
-            - store_artifacts:
-                path: << parameters.artifacts_path >>
-  publish-test-results:
-    description: |
-      Store test reports.
-    parameters:
-      test_results_path:
-        description: Results to be published
-        type: string
-    steps:
-      - when:
-          condition: << parameters.test_results_path >>
-          steps:
-            - store_test_results:
-                path: << parameters.test_results_path >>
-  with-cache:
-    description: |
-      Run a set of steps with gradle dependencies cached.
-    parameters:
-      steps:
-        type: steps
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "build.gradle" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run:
+          name: Assemble
+          command: ./gradlew assemble
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v1-dependencies-{{ checksum "build.gradle" }}
+
+  Test:
+    executor: tugboat-executor
     steps:
       - run:
-          command: find . -name 'build.gradle' | sort | xargs cat | shasum | awk '{print
-            $1}' > /tmp/gradle_cache_seed
-          name: Generate Cache Checksum
-      - restore_cache:
-          key: gradle-{{ checksum "/tmp/gradle_cache_seed" }}-{{ checksum ".circleci/config.yml"
-            }}
-      - steps: << parameters.steps >>
-      - save_cache:
-          key: gradle-{{ checksum "/tmp/gradle_cache_seed" }}-{{ checksum ".circleci/config.yml"
-            }}
-          paths:
-            - ~/.gradle/caches
-            - ~/.gradle/wrapper
-description: |
-  Simplify common tasks for building and testing Java projects using Gradle.
-examples:
-  full_gradle_workflow:
-    description: Build, test and publish results, publish tests and artifacts.
-    usage:
-      orbs:
-        gradle: bizzabo/gradle@1.1.0
-      version: 2.1
-      workflows:
-        checkout_build_project:
-          jobs:
-            - gradle/checkout_build_test_publish:
-                additional-steps:
-                  - persist_to_workspace:
-                      paths:
-                        - path/to/my/dockerfile
-                        - path/to/my/artifact.jar
-                      root: .
-                artifacts_path: build/libs/my-project.jar
-                test_results_path: build/test-results
-  integrated_gradle_workflow:
-    description: Build, test and publish results using custom jobs.
-    usage:
-      jobs:
-        build-my-project:
-          docker:
-            - image: circleci/openjdk:11-jdk-stretch-node-browsers-legacy
-          steps:
-            - gradle/checkout-build-test
-            - persist_to_workspace:
-                paths:
-                  - path/to/my/artifact.jar
-                root: .
-        publish-my-artifacts:
-          docker:
-            - image: circleci/openjdk:11-jdk-stretch-node-browsers-legacy
-          steps:
-            - attach_workspace:
-                at: .
-            - gradle/publish-artifacts:
-                artifact_path: path/to/my/artifact.jar
-      orbs:
-        gradle: bizzabo/gradle@1.1.0
-      version: 2.1
-      workflows:
-        checkout_build_project:
-          jobs:
-            - build-my-project
-            - publish-my-artifacts:
-                requires:
-                  - build-my-project
-  simple_gradle_workflow:
-    description: Build, test and publish results.
-    usage:
-      orbs:
-        gradle: bizzabo/gradle@1.1.0
-      version: 2.1
-      workflows:
-        checkout_build_project:
-          jobs:
-            - gradle/checkout_build_test
-executors:
-  default:
-    docker:
-      - image: circleci/openjdk:11-jdk-stretch-node-browsers-legacy
-jobs:
-  checkout_build_test:
-    description: |
-      Checkout, build and test a gradle project.
-    executor: << parameters.executor >>
-    parameters:
-      additional-steps:
-        default:
-          - run: ""
-        description: Additional steps to run after build, i.e. persist artifacts or
-          dockerfiles
-        type: steps
-      build_command:
-        default: build
-        description: Custom Gradle build command to use
-        type: string
-      executor:
-        default: default
-        description: The name of custom executor to use
-        type: executor
-      test_command:
-        default: test
-        description: Custom Gradle test command to use
-        type: string
-    steps:
-      - checkout-build-test:
-          additional-steps: << parameters.additional-steps >>
-          build_command: << parameters.build_command >>
-          executor: << parameters.executor >>
-          test_command: << parameters.test_command >>
-  checkout_build_test_publish:
-    description: |
-      Checkout, build and test a gradle project, publish tests and artifacts.
-    executor: << parameters.executor >>
-    parameters:
-      additional-steps:
-        default:
-          - run: ""
-        description: Additional steps to run after build, i.e. persist artifacts or
-          dockerfiles
-        type: steps
-      artifacts_path:
-        description: Artifacts to be published
-        type: string
-      build_command:
-        default: build
-        description: Custom Gradle build command to use
-        type: string
-      executor:
-        default: default
-        description: The name of custom executor to use
-        type: executor
-      test_command:
-        default: test
-        description: Custom Gradle test command to use
-        type: string
-      test_results_path:
-        description: Results to be published
-        type: string
-    steps:
-      - checkout-build-test-publish:
-          additional-steps: << parameters.additional-steps >>
-          artifacts_path: << parameters.artifacts_path >>
-          build_command: << parameters.build_command >>
-          executor: << parameters.executor >>
-          test_command: << parameters.test_command >>
-          test_results_path: << parameters.test_results_path >>
-version: 2.1
+          name: Test
+          command: ./gradlew test
+workflows:
+  version: 2.1
+  branch:
+    jobs:
+      - Build
+      - Test
+        requires:
+          - Build
+        context: ci
