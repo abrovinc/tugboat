@@ -26,23 +26,6 @@ examples:
             - gradle/run:
                 command: build -x test
 
-  custom-reports:
-    description: Publish custom results and reports
-
-    usage:
-      version: 2.1
-
-      orbs:
-        gradle: circleci/gradle@1.0.0
-
-      workflows:
-        test-with-custom-reports:
-          jobs:
-            - gradle/test:
-                test_command: myTests
-                test_results_path: build/my-results/
-                store_artifacts: build/my-reports/
-
 executors:
   gradle:
     description: The docker container to use when running Gradle builds
