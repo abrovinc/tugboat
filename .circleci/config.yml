@@ -1,0 +1,42 @@
+
+version: 2.1
+executors:
+  tugboat-exec:
+    docker:
+      - image: circleci/openjdk:10-jdk
+    environment:
+      - IMAGE: tugboat-executor
+jobs:
+  Build:
+    executor: tugboat-executor
+    steps:
+      - checkout
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "build.gradle" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run:
+          name: Assemble
+          command: ./gradlew assemble
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v1-dependencies-{{ checksum "build.gradle" }}
+
+  Test:
+    executor: tugboat-executor
+    steps:
+      - run:
+          name: Test
+          command: ./gradlew test
+workflows:
+  version: 2.1
+  branch:
+    jobs:
+      - Build
+      - Test
